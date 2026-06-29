@@ -1,4 +1,4 @@
-# SSCC Scanner
+# Terminal1
 
 A single-file web app (`index.html`) for your Android phone. It uses the rear
 camera to scan GS1‑128 shipping‑label barcodes, extracts **only the SSCC**
