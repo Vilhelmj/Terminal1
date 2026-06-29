@@ -304,6 +304,7 @@ function render(newCode){
 }
 function removeAt(k){
   const it=items[k]; if(!it) return;
+  if(!confirm("Fjerne dette nummeret fra listen?\n\n"+it.code)) return;
   items.splice(k,1);
   if(!items.some(o=>o.code===it.code)) codeSet.delete(it.code); // keep set in sync
   saveList(); render();
