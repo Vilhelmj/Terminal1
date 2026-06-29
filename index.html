@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10b981">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SSCC-skanner</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#111c2e; --panel2:#16243a; --line:#24344f;
+    --txt:#e8eef7; --muted:#9fb0c8; --accent:#10b981; --accent2:#0ea5e9;
+    --danger:#ef4444; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; padding:14px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:5;
+  }
+  header h1{font-size:18px; margin:0; letter-spacing:.2px}
+  header h1 small{display:block; font-size:11px; color:var(--muted); font-weight:400; letter-spacing:.3px}
+  .count{
+    background:var(--accent); color:#022; font-weight:700; border-radius:999px;
+    min-width:40px; text-align:center; padding:6px 12px; font-variant-numeric:tabular-nums;
+  }
+  main{padding:14px 14px 90px; max-width:680px; margin:0 auto}
+  #status{font-size:13px; color:var(--muted); margin:0 2px 12px; min-height:18px}
+  #status.bad{color:var(--warn)}
+  .camera-wrap{
+    position:relative; background:#000; border:1px solid var(--line); border-radius:14px;
+    overflow:hidden; aspect-ratio:3/4; max-height:60vh; display:flex; align-items:center; justify-content:center;
+  }
+  #video{width:100%; height:100%; object-fit:cover; display:block}
+  .reticle{
+    position:absolute; inset:18% 8%; border:2px solid rgba(16,185,129,.9);
+    border-radius:12px; box-shadow:0 0 0 100vmax rgba(0,0,0,.28); pointer-events:none;
+  }
+  .reticle::after{
+    content:""; position:absolute; left:0; right:0; top:50%; height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    box-shadow:0 0 8px var(--accent);
+  }
+  .reticle.hidden{display:none}
+  .cam-hint{
+    position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px;
+    color:#cfe; text-shadow:0 1px 2px #000; pointer-events:none;
+  }
+  .cam-controls{position:absolute; top:10px; right:10px; display:flex; gap:8px}
+  .flash{position:absolute; inset:0; background:var(--accent); opacity:0; pointer-events:none}
+  .flash.on{animation:fl .35s ease-out}
+  @keyframes fl{from{opacity:.45}to{opacity:0}}
+  button{
+    font:inherit; color:var(--txt); background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; padding:11px 14px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  button:active{transform:translateY(1px)}
+  button[disabled]{opacity:.4; pointer-events:none}
+  button.primary{background:var(--accent); color:#022; border-color:transparent; font-weight:700}
+  button.icon{padding:9px 11px; background:rgba(0,0,0,.45)}
+  button.icon.active{background:var(--warn); color:#211}
+  .row{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
+  .row > *{flex:1 1 auto}
+  .manual{display:flex; gap:8px; margin-top:12px}
+  .manual input{
+    flex:1; min-width:0; background:var(--panel); color:var(--txt); border:1px solid var(--line);
+    border-radius:10px; padding:11px 12px; font-variant-numeric:tabular-nums; letter-spacing:.5px;
+  }
+  .manual button{flex:0 0 auto}
+  .toolbar{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px}
+  .toolbar button{font-size:14px; padding:12px 6px}
+  .danger-zone{margin-top:54px; padding-top:16px; border-top:1px dashed var(--line);
+    display:flex; flex-direction:column; align-items:center; gap:8px}
+  .dz-label{font-size:11px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted)}
+  #clearBtn{color:#fbb; border-color:#5b2b2f; background:#2a1416; padding:11px 26px}
+  ol#list{list-style:none; margin:16px 0 0; padding:0; display:flex; flex-direction:column; gap:7px}
+  ol#list li{
+    display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px;
+  }
+  li.new{animation:pop .5s ease}
+  @keyframes pop{0%{background:#13351f}100%{background:var(--panel)}}
+  li .idx{color:var(--muted); font-size:12px; min-width:26px; text-align:right; font-variant-numeric:tabular-nums}
+  li .code{flex:1; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:16px; letter-spacing:.4px; word-break:break-all}
+  li .src{font-size:10px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:1px 5px}
+  li .del{flex:0 0 auto; background:transparent; border:none; color:var(--muted); font-size:20px; padding:2px 8px}
+  .empty{color:var(--muted); text-align:center; padding:26px 10px; font-size:14px}
+  #toast{
+    position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(20px);
+    background:#0a0f1a; border:1px solid var(--line); color:var(--txt); padding:10px 16px;
+    border-radius:999px; font-size:14px; opacity:0; transition:.22s; pointer-events:none; z-index:20; max-width:90vw;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  #toast.dup{border-color:var(--warn); color:#ffd9a3}
+  #toast.err{border-color:var(--danger); color:#ffc4c4}
+  a.helplink{color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>SSCC-skanner<small>leser kun GS1 (00)-strekkoder</small></h1>
+  <div class="count" id="count">0</div>
+</header>
+
+<main>
+  <div id="status">Trykk «Start kamera», og rett bakkameraet mot SSCC-strekkoden.</div>
+
+  <div class="camera-wrap">
+    <video id="video" playsinline muted></video>
+    <div class="reticle hidden" id="reticle"></div>
+    <div class="flash" id="flash"></div>
+    <div class="cam-hint" id="camHint" hidden>Plasser strekkoden inne i rammen</div>
+    <div class="cam-controls">
+      <button class="icon" id="torchBtn" hidden title="Slå lommelykt av/på">🔦</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="primary" id="startBtn">Start kamera</button>
+    <button id="stopBtn" hidden>Stopp</button>
+  </div>
+
+  <div class="manual">
+    <input id="manualInput" type="text" inputmode="numeric" autocomplete="off"
+           maxlength="22" placeholder="Eller skriv inn det 18-sifrede SSCC-nummeret">
+    <button id="manualAdd">Legg til</button>
+  </div>
+
+  <div class="toolbar">
+    <button id="shareBtn" title="Del listen som en CSV-fil">Del</button>
+    <button id="csvBtn" title="Last ned en CSV-fil">CSV</button>
+    <button id="emailBtn" title="Åpne e-postappen">E-post</button>
+    <button id="copyBtn" title="Kopier alle numre">Kopier</button>
+  </div>
+
+  <ol id="list"></ol>
+
+  <div class="danger-zone">
+    <span class="dz-label">Faresone</span>
+    <button id="clearBtn" title="Slett alle skannede numre">Slett alt</button>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   SSCC extraction — returns the 18-digit SSCC (AI 00) only, else null.
+   Handles every form we can receive:
+     • Android BarcodeDetector (FNC1/GS stripped): "00370251698000324972"
+     • ZXing w/ ASSUME_GS1 (']C1' prefix, GS between var fields): "]C100370251698000324972"
+     • Human-readable / manual paste: "(00)370251698000324972"
+     • Bare 18-digit body (manual typing), only when allowBareBody=true
+   Rejects the GTIN barcode "(02)07025165103697(37)000024" by walking
+   element strings against the GS1 fixed-length AI table (never a naive regex).
+   NOTE: Android's BarcodeDetector strips GS separators, so on a *combined*
+   barcode where a VARIABLE-length AI precedes (00), the SSCC can't be located
+   (rare). SSCC pallet labels carry (00) in its own/leading field, which works.
+   ========================================================================= */
+const GS = "\x1D"; // ASCII 29 — transmitted form of FNC1 field separator
+const FIXED_LEN_AI = { // AI prefix + data = TOTAL field length (GS1 predefined fixed-length AIs)
+  "00":20,"01":16,"02":16,"03":16,"04":18,
+  "11":8,"12":8,"13":8,"14":8,"15":8,"16":8,"17":8,"18":8,"19":8,"20":4,
+  "31":10,"32":10,"33":10,"34":10,"35":10,"36":10,"41":16
+};
+const FIXED_PREFIX2 = new Set(Object.keys(FIXED_LEN_AI));
+
+function computeSsccCheckDigit(d17){
+  let sum=0;
+  for(let i=0;i<17;i++){ const n=d17.charCodeAt(16-i)-48; sum += (i%2===0)? n*3 : n; }
+  return (10-(sum%10))%10;
+}
+function isValidSscc(s){
+  if(!/^\d{18}$/.test(s)) return false;
+  return computeSsccCheckDigit(s.slice(0,17)) === (s.charCodeAt(17)-48);
+}
+function extractSSCC(raw, opts){
+  opts = opts || {};
+  const allowBareBody = !!opts.allowBareBody;
+  const validate = !!opts.validateCheckDigit;
+  if(raw==null) return null;
+  let s = String(raw);
+  s = s.replace(/^\](?:C1|d2|e0|E0|Q3|C0)/, "");        // strip AIM symbology id
+  s = s.replace(/^[\x00-\x1F\s]+|[\x00-\x1F\s]+$/g, ""); // trim ctrl/space (keep inner GS)
+  if(/[()]/.test(s) && s.indexOf(GS)===-1) s = s.replace(/[()\s]/g, ""); // HRI form
+  s = s.replace(/^\x1D+/, "");                            // drop leading GS
+
+  // Degenerate all-digit inputs
+  if(/^\d+$/.test(s)){
+    if(s.length===20 && s.startsWith("00")){
+      const c=s.slice(2);
+      return (!validate || isValidSscc(c)) ? c : null;
+    }
+    if(allowBareBody && s.length===18){
+      return (!validate || isValidSscc(s)) ? s : null;
+    }
+  }
+  // Walk element strings by AI
+  let i=0;
+  while(i<s.length){
+    if(s.charCodeAt(i)===0x1D){ i++; continue; }
+    if(i+2>s.length || !/\d\d/.test(s.substr(i,2))) return null;
+    const ai2=s.substr(i,2);
+    if(ai2==="00"){
+      const code=s.substr(i+2,18);
+      if(!/^\d{18}$/.test(code)) return null;
+      // AI(00) is a fixed 20-char field: it must end the data, be followed by a
+      // GS separator, or be followed by another AI — never trailing loose digits.
+      const after=i+20;
+      if(!(after===s.length || s.charCodeAt(after)===0x1D ||
+           (after+2<=s.length && /^\d\d/.test(s.substr(after,2))))) return null;
+      if(validate && !isValidSscc(code)) return null;
+      return code;                                         // the only success path
+    }
+    if(FIXED_PREFIX2.has(ai2)){
+      const total=FIXED_LEN_AI[ai2];
+      if(!total || i+total>s.length) return null;
+      i+=total; continue;
+    }
+    let j=s.indexOf(GS,i); if(j===-1) j=s.length; i=j;     // variable-length AI
+  }
+  return null;
+}
+
+/* ========================= state + persistence ========================= */
+const STORAGE_KEY = "sscc.list.v2";
+let loadCorrupted=false;
+function loadList(){
+  let raw=null;
+  try{
+    raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    const arr=JSON.parse(raw);
+    if(!Array.isArray(arr)) throw new Error("stored value is not an array");
+    // de-duplicate by code so codeSet (a Set) can never disagree with items
+    const seen=new Set(), out=[];
+    for(const x of arr){
+      if(x && typeof x.code==="string" && !seen.has(x.code)){ seen.add(x.code); out.push(x); }
+    }
+    return out;
+  }catch(e){
+    // preserve the unreadable payload instead of silently destroying it
+    if(raw){ try{ localStorage.setItem(STORAGE_KEY+".bak."+Date.now(), raw); }catch(_){} loadCorrupted=true; }
+    return [];
+  }
+}
+function saveList(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); return true; }
+  catch(e){ toast("Kunne ikke lagre – eksporter nå for å unngå å miste skanninger","err"); return false; }
+}
+let items = loadList(); // [{code, source, t}]
+const codeSet = new Set(items.map(x=>x.code));
+
+/* ============================== UI refs ============================== */
+const $ = id => document.getElementById(id);
+const video=$("video"), statusEl=$("status"), listEl=$("list"), countEl=$("count");
+const startBtn=$("startBtn"), stopBtn=$("stopBtn"), torchBtn=$("torchBtn");
+const reticle=$("reticle"), camHint=$("camHint"), flash=$("flash");
+
+function setStatus(msg, bad){ statusEl.textContent=msg; statusEl.classList.toggle("bad", !!bad); }
+
+let toastTimer=null;
+function toast(msg, kind){
+  const t=$("toast");
+  t.textContent=msg; t.className="show"+(kind?" "+kind:"");
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ t.className=""; }, 1700);
+}
+
+function render(newCode){
+  countEl.textContent=items.length;
+  const hasItems=items.length>0;
+  ["shareBtn","csvBtn","emailBtn","copyBtn","clearBtn"].forEach(id=>$(id).disabled=!hasItems);
+  if(!hasItems){
+    listEl.innerHTML='<li class="empty">Ingen SSCC ennå. Skann en etikett eller skriv inn ett.</li>';
+    return;
+  }
+  listEl.innerHTML="";
+  // newest first
+  for(let k=items.length-1;k>=0;k--){
+    const it=items[k];
+    const li=document.createElement("li");
+    if(it.code===newCode) li.className="new";
+    const idx=document.createElement("span"); idx.className="idx"; idx.textContent=(k+1)+".";
+    const code=document.createElement("span"); code.className="code"; code.textContent=it.code;
+    const src=document.createElement("span"); src.className="src"; src.textContent=it.source||"scan";
+    const del=document.createElement("button"); del.className="del"; del.textContent="×";
+    del.title="Fjern"; del.setAttribute("aria-label","Fjern "+it.code);
+    del.onclick=()=>removeAt(k);
+    li.append(idx,code,src,del);
+    listEl.appendChild(li);
+  }
+}
+function removeAt(k){
+  const it=items[k]; if(!it) return;
+  items.splice(k,1);
+  if(!items.some(o=>o.code===it.code)) codeSet.delete(it.code); // keep set in sync
+  saveList(); render();
+  toast("Fjernet");
+}
+
+/* ====================== add / decode pipeline ====================== */
+function addCode(code, source){
+  if(codeSet.has(code)) return "dup";
+  items.push({code, source:source||"scan", t:Date.now()});
+  codeSet.add(code);
+  const saved=saveList();
+  render(code);
+  return saved ? "added" : "added_unsaved";
+}
+
+let lastCode=null, lastTime=0;
+const SAME_CODE_MS=2500, GLOBAL_GAP_MS=350;
+function onDecode(code){
+  const now=Date.now();
+  if(code===lastCode && now-lastTime<SAME_CODE_MS) return;
+  if(now-lastTime<GLOBAL_GAP_MS) return;
+  lastCode=code; lastTime=now;
+  const res=addCode(code,"scan");
+  if(res==="dup"){
+    beep(320,0.16); vibe([30,40,30]); toast("Allerede skannet","dup");
+  }else{
+    beep(880,0.08); vibe(60); flashOn();
+    if(res==="added_unsaved"){
+      toast("Lagt til – men IKKE lagret! Eksporter nå","err");
+      setStatus("⚠ Lagringen er full eller blokkert – skanninger blir IKKE lagret. Eksporter nå.", true);
+    }else toast("Lagt til  "+code);
+  }
+}
+
+/* ====================== sound / haptics / flash ====================== */
+let audioCtx=null;
+function unlockAudio(){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended") audioCtx.resume();
+  }catch(e){}
+}
+function beep(freq,ms){
+  try{
+    if(!audioCtx) return;
+    if(audioCtx.state==="suspended") audioCtx.resume();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=freq; o.type="sine"; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.16,audioCtx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+ms);
+    o.start(); o.stop(audioCtx.currentTime+ms+0.02);
+  }catch(e){}
+}
+function vibe(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
+function flashOn(){ flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on"); }
+
+/* ============================ camera engine ============================ */
+let scanning=false, starting=false, inFlight=false, lastRun=0, rafId=null, torchProbeTimer=null;
+let nativeDetector=null, zxingReader=null, zxingControls=null, torchOn=false;
+
+async function nativeReady(){
+  if(!("BarcodeDetector" in window)) return false;
+  try{ return (await window.BarcodeDetector.getSupportedFormats()).includes("code_128"); }
+  catch(e){ return false; }
+}
+function loadZXing(){
+  if(window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+  return new Promise((res,rej)=>{
+    const sc=document.createElement("script");
+    sc.src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.0/umd/zxing-browser.min.js";
+    sc.onload=()=>res(window.ZXingBrowser);
+    sc.onerror=()=>rej(new Error("Could not load the scanner library (no internet?)"));
+    document.head.appendChild(sc);
+  });
+}
+
+async function startCamera(){
+  if(scanning || starting) return;
+  if(!window.isSecureContext || !(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+    setStatus("Kameraet krever HTTPS. Publiser siden på GitHub Pages (https://…) og åpne den der.", true);
+    toast("Kamera blokkert: krever HTTPS","err");
+    return;
+  }
+  starting=true;
+  unlockAudio();
+  startBtn.disabled=true;
+  setStatus("Starter kamera…");
+  try{
+    if(await nativeReady()){
+      await startNative();
+      setStatus("Skanner (enhetens dekoder). Rett mot SSCC-strekkoden.");
+    }else{
+      setStatus("Laster skanner…");
+      await startZXing();
+      setStatus("Skanner (ZXing). Rett mot SSCC-strekkoden.");
+    }
+  }catch(err){
+    // release anything acquired before the failure so the camera can't leak
+    try{ if(zxingControls){ zxingControls.stop(); } }catch(e){}
+    zxingControls=null;
+    const lv=video.srcObject;
+    if(lv){ try{ lv.getTracks().forEach(t=>t.stop()); }catch(e){} video.srcObject=null; }
+    starting=false;
+    startBtn.disabled=false;
+    const name=err&&err.name;
+    if(name==="NotAllowedError"||name==="SecurityError")
+      setStatus("Kameratilgang avslått. Gi tilgang til kameraet og trykk Start igjen.", true);
+    else if(name==="NotFoundError")
+      setStatus("Fant ikke noe kamera på denne enheten.", true);
+    else
+      setStatus("Kunne ikke starte kameraet: "+(err&&err.message||err), true);
+    return;
+  }
+  scanning=true; starting=false;
+  startBtn.hidden=true; stopBtn.hidden=false;
+  reticle.classList.remove("hidden"); camHint.hidden=false;
+  afterStart();
+}
+
+async function startNative(){
+  nativeDetector=nativeDetector||new window.BarcodeDetector({formats:["code_128"]});
+  const stream=await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}}, audio:false
+  });
+  video.srcObject=stream;
+  try{ await video.play(); }
+  catch(e){ stream.getTracks().forEach(t=>t.stop()); video.srcObject=null; throw e; }
+  rafId=requestAnimationFrame(nativeLoop);
+}
+async function nativeLoop(ts){
+  if(!scanning) return;
+  rafId=requestAnimationFrame(nativeLoop);
+  if(inFlight) return;
+  if(ts-lastRun<150) return;
+  if(video.readyState<2 || !video.videoWidth) return;
+  lastRun=ts; inFlight=true;
+  try{
+    const codes=await nativeDetector.detect(video);
+    for(const c of codes){
+      if(c.format && c.format!=="code_128") continue;
+      const sscc=extractSSCC(c.rawValue, {validateCheckDigit:true});
+      if(sscc) onDecode(sscc);
+    }
+  }catch(e){ /* transient — keep scanning */ }
+  finally{ inFlight=false; }
+}
+
+async function startZXing(){
+  const Z=await loadZXing();
+  // @zxing/browser@0.2.0 does NOT export a DecodeHintType object — the hint enum
+  // compiled to internal numeric values. Key the Map by those values directly:
+  //   POSSIBLE_FORMATS = 2, ASSUME_GS1 = 8  (verified against the shipped bundle).
+  // extractSSCC tolerates output with or without these hints, so on any mismatch
+  // we fall back to a no-hints reader instead of crashing.
+  try{
+    const hints=new Map();
+    if(Z.BarcodeFormat && Z.BarcodeFormat.CODE_128!=null) hints.set(2,[Z.BarcodeFormat.CODE_128]);
+    hints.set(8,true);
+    zxingReader=new Z.BrowserMultiFormatReader(hints);
+  }catch(e){
+    zxingReader=new Z.BrowserMultiFormatReader();
+  }
+  const constraints={video:{facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}}, audio:false};
+  zxingControls=await zxingReader.decodeFromConstraints(constraints, video, (result/*,err*/)=>{
+    if(!result) return;                       // NotFoundException per empty frame — ignore
+    const sscc=extractSSCC(result.getText(), {validateCheckDigit:true});
+    if(sscc) onDecode(sscc);
+  });
+}
+
+function afterStart(){
+  // torch becomes available once the track is live; check shortly after start
+  torchProbeTimer=setTimeout(()=>{
+    torchProbeTimer=null;
+    if(!scanning) return;
+    const track=currentTrack();
+    let caps={}; try{ caps=track&&track.getCapabilities?track.getCapabilities():{}; }catch(e){}
+    torchBtn.hidden = !(caps && caps.torch);
+  }, 700);
+}
+function currentTrack(){
+  const s=video.srcObject;
+  return s && s.getVideoTracks ? s.getVideoTracks()[0] : null;
+}
+async function toggleTorch(){
+  const track=currentTrack(); if(!track) return;
+  try{
+    await track.applyConstraints({advanced:[{torch:!torchOn}]});
+    torchOn=!torchOn;
+    torchBtn.classList.toggle("active", torchOn);
+  }catch(e){ toast("Lommelykt er ikke tilgjengelig","err"); torchBtn.hidden=true; }
+}
+
+function stopCamera(){
+  scanning=false; starting=false;
+  if(torchProbeTimer){ clearTimeout(torchProbeTimer); torchProbeTimer=null; }
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  // explicitly command the torch off before teardown (track.stop() also kills it,
+  // but some Android devices latch it) — fire-and-forget on the live track
+  const tk=currentTrack();
+  if(tk && torchOn){ try{ tk.applyConstraints({advanced:[{torch:false}]}); }catch(e){} }
+  if(zxingControls){ try{ zxingControls.stop(); }catch(e){} zxingControls=null; }
+  const s=video.srcObject;
+  if(s){ try{ s.getTracks().forEach(t=>t.stop()); }catch(e){} }
+  video.srcObject=null;
+  torchOn=false; torchBtn.classList.remove("active"); torchBtn.hidden=true;
+  startBtn.hidden=false; startBtn.disabled=false; stopBtn.hidden=true;
+  reticle.classList.add("hidden"); camHint.hidden=true;
+  setStatus("Kamera stoppet. "+items.length+" SSCC lagret.");
+}
+
+/* ============================== exports ============================== */
+function csvString(){
+  const lines=items.map(x=>x.code);
+  return "﻿"+"sscc\n"+lines.join("\n")+"\n"; // BOM for Excel
+}
+function plainList(){ return items.map(x=>x.code).join("\n"); }
+function dateStr(){ return new Date().toISOString().slice(0,10); }
+
+function downloadCsv(){
+  const blob=new Blob([csvString()],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="sscc_"+dateStr()+".csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast("CSV lastet ned");
+}
+async function shareList(){
+  const csv=csvString();
+  const file=new File([csv],"sscc_"+dateStr()+".csv",{type:"text/csv"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:"SSCC-skanning", text:items.length+" SSCC-koder"}); return; }
+    catch(err){ if(err&&err.name==="AbortError") return; }
+  }
+  if(navigator.share){
+    try{ await navigator.share({title:"SSCC-skanning", text:plainList()}); return; }
+    catch(err){ if(err&&err.name==="AbortError") return; }
+  }
+  downloadCsv(); // last resort
+}
+function emailList(){
+  const subject="SSCC-skanning "+dateStr()+" ("+items.length+")";
+  const body="Skannet "+items.length+" SSCC-koder "+dateStr()+":\n\n"+plainList();
+  const url="mailto:?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+  if(url.length>1800){
+    toast("For mange til e-post – bruker Del/CSV","dup");
+    shareList();
+    return;
+  }
+  location.href=url;
+}
+async function copyList(){
+  const text=plainList();
+  try{
+    if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
+    else{ const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }
+    toast("Kopierte "+items.length+" numre");
+  }catch(e){ toast("Kopiering mislyktes","err"); }
+}
+function clearAll(){
+  if(!items.length) return;
+  if(!confirm("Slette alle "+items.length+" skannede SSCC-numre? Eksporter først hvis du er usikker.")) return;
+  items=[]; codeSet.clear(); saveList(); render();
+  toast("Slettet");
+}
+
+/* =========================== manual entry =========================== */
+function manualAdd(){
+  const input=$("manualInput");
+  const sscc=extractSSCC(input.value,{allowBareBody:true, validateCheckDigit:true});
+  if(!sscc){ toast("Ugyldig SSCC (sjekk de 18 sifrene)","err"); return; }
+  const res=addCode(sscc,"typed");
+  if(res==="dup"){ toast("Allerede i listen","dup"); }
+  else{
+    beep(880,0.08); vibe(60); flashOn();
+    if(res==="added_unsaved"){
+      toast("Lagt til – men IKKE lagret! Eksporter nå","err");
+      setStatus("⚠ Lagringen er full eller blokkert – skanninger blir IKKE lagret. Eksporter nå.", true);
+    }else toast("Lagt til  "+sscc);
+  }
+  input.value="";
+}
+
+/* ============================== wiring ============================== */
+startBtn.onclick=startCamera;
+stopBtn.onclick=stopCamera;
+torchBtn.onclick=toggleTorch;
+$("shareBtn").onclick=shareList;
+$("csvBtn").onclick=downloadCsv;
+$("emailBtn").onclick=emailList;
+$("copyBtn").onclick=copyList;
+$("clearBtn").onclick=clearAll;
+$("manualAdd").onclick=manualAdd;
+$("manualInput").addEventListener("keydown",e=>{ if(e.key==="Enter") manualAdd(); });
+
+document.addEventListener("visibilitychange",()=>{ if(document.hidden && scanning) stopCamera(); });
+window.addEventListener("pagehide",()=>{ if(scanning) stopCamera(); });
+
+render();
+if(loadCorrupted){
+  setStatus("⚠ Den forrige lagrede listen kunne ikke leses; den ble sikkerhetskopiert og listen ble tilbakestilt.", true);
+}else if(!window.isSecureContext){
+  setStatus("⚠ Åpnet uten HTTPS – kameraet starter ikke her. Publiser på GitHub Pages (https://…). Du kan fortsatt skrive inn SSCC manuelt.", true);
+}
+</script>
+</body>
+</html>
